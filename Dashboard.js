@@ -17,9 +17,9 @@ export default function Dashboard({ navigation }) {
     { label: "Room Allocation", screen: "RoomAllocation", icon: "🏠" },
     { label: "Billing & Invoice", screen: "BillingInvoice", icon: "💳" },
     { label: "Services", screen: "Services", icon: "🛠️" },
-    { label: "Complaint&Maintaince", screen: "ComplaintBox", icon: "💬" },
-    // { label: "Mess", screen: "Mess", icon: "🍽️" },
-    // { label: "Transport", screen: "TransportManagement", icon: "🚌" },
+    { label: "Complaint Box", screen: "ComplaintBox", icon: "💬" },
+    { label: "Mess", screen: "Mess", icon: "🍽️" },
+    { label: "Transport", screen: "TransportManagement", icon: "🚌" },
     { label: "Nearby Hostels", screen: "NearbyHostels", icon: "📍" },
     { label: "Leave Log", screen: "LeaveLog", icon: "🗓️" },
     {
