@@ -1,0 +1,93 @@
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { FiLogOut } from "react-icons/fi";
+
+export default function AdminLayout({ children, active }) {
+  const navigate = useNavigate();
+
+  const links = [
+    { to: "/admin", label: "Dashboard", key: "dashboard" },
+    { to: "/admin/students", label: "Students", key: "students" },
+    { to: "/admin/complaints", label: "Complaints", key: "complaints" },
+    { to: "/admin/hostel", label: "Hostels", key: "hostel" },
+    { to: "/admin/wardens", label: "Wardens", key: "wardens" },
+    { to: "/admin/finance", label: "Finance", key: "finance" },
+    { to: "/admin/transport", label: "Transport", key: "transport" },
+    {
+      to: "/admin/notifications-alerts",
+      label: "Notifications",
+      key: "notifications",
+    },
+    { to: "/admin/profile", label: "Profile", key: "profile" },
+  ];
+
+  function handleLogout() {
+    localStorage.removeItem("role");
+    navigate("/login");
+  }
+
+  return (
+    <div className="flex min-h-screen bg-slate-100">
+      {/* Sidebar */}
+      <aside className="w-60 bg-slate-900 text-slate-100 flex flex-col shadow-lg">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-800">
+          <h1 className="text-sm font-bold tracking-wide">RiphahStay Admin</h1>
+          <p className="text-[11px] text-slate-400">Hostel Management Panel</p>
+        </div>
+
+        {/* Nav links */}
+        <nav className="flex-1 py-3 text-sm space-y-1 overflow-y-auto">
+          {links.map((link) => (
+            <SideLink
+              key={link.key}
+              to={link.to}
+              label={link.label}
+              active={active === link.key}
+            />
+          ))}
+        </nav>
+
+        {/* Logout */}
+        <button
+          onClick={handleLogout}
+          className="m-4 bg-slate-800 hover:bg-slate-700 text-xs py-2 rounded-lg flex items-center justify-center gap-2"
+        >
+          <FiLogOut size={14} />
+          Logout
+        </button>
+      </aside>
+
+      {/* Right side content */}
+      <main className="flex-1 flex flex-col">
+        {/* Top header */}
+        <header className="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-700">
+            Admin Panel Overview
+          </h2>
+          <span className="text-xs text-slate-500">
+            admin@riphah.edu.pk
+          </span>
+        </header>
+
+        {/* Page content */}
+        <div className="p-6 flex-1 overflow-y-auto">{children}</div>
+      </main>
+    </div>
+  );
+}
+
+function SideLink({ to, label, active }) {
+  return (
+    <Link
+      to={to}
+      className={`block mx-3 px-3 py-2 rounded-md transition-colors duration-150 ${
+        active
+          ? "bg-blue-600 text-white shadow-sm"
+          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+      }`}
+    >
+      {label}
+    </Link>
+  );
+}
