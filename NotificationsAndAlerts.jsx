@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import AdminLayout from "../../layout/AdminLayout.jsx";
+import WardenLayout from "../../layout/WardenLayout.jsx";
 import { useAuthContext } from "../../context/AuthContext.jsx";
 import { FiBell, FiSend, FiAlertCircle, FiCheck } from "react-icons/fi";
 
@@ -15,20 +15,13 @@ export default function NotificationsAlerts() {
     const [sendError, setSendError] = useState("");
     const [sent, setSent] = useState(false);
 
-    const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
-
-    const fetchNotifications = async () => {
-        try {
-            const res = await axios.get(`${API_BASE}/notifications/`, authHeaders);
-            setNotifications(res.data.notifications || []);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => { if (token) fetchNotifications(); }, [token]); // eslint-disable-line
+    useEffect(() => {
+        if (!token) return;
+        axios.get(`${API_BASE}/notifications/`, { headers: { Authorization: `Bearer ${token}` } })
+            .then((res) => setNotifications(res.data.notifications || []))
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [token]);
 
     const handleSend = async () => {
         if (!text.trim()) return;
@@ -36,11 +29,15 @@ export default function NotificationsAlerts() {
         setSendError("");
         setSent(false);
         try {
-            await axios.post(`${API_BASE}/notifications/send`, { message: text }, authHeaders);
+            await axios.post(`${API_BASE}/notifications/send`, { message: text }, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
             setSent(true);
             setText("");
             setTimeout(() => setSent(false), 3000);
-            fetchNotifications();
+            // Refresh list
+            const res = await axios.get(`${API_BASE}/notifications/`, { headers: { Authorization: `Bearer ${token}` } });
+            setNotifications(res.data.notifications || []);
         } catch (err) {
             setSendError(err?.response?.data?.message || "Failed to send notification");
         } finally {
@@ -49,22 +46,22 @@ export default function NotificationsAlerts() {
     };
 
     return (
-        <AdminLayout active="notifications">
+        <WardenLayout active="notifications">
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Notifications & Alerts</h1>
-                    <p className="page-subtitle">Broadcast announcements to all students</p>
+                    <p className="page-subtitle">Send notices and view recent alerts</p>
                 </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-5">
-                {/* Compose panel */}
+                {/* Send panel */}
                 <div className="card p-5">
                     <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-                            <FiSend size={14} className="text-indigo-600" />
+                        <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+                            <FiSend size={14} className="text-violet-600" />
                         </div>
-                        <h3 className="text-sm font-semibold text-slate-700">Send Announcement</h3>
+                        <h3 className="text-sm font-semibold text-slate-700">Send Notice</h3>
                     </div>
 
                     {sendError && (
@@ -84,8 +81,8 @@ export default function NotificationsAlerts() {
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         className="field text-sm resize-none mb-3"
-                        rows={5}
-                        placeholder="Write an announcement for wardens and students…"
+                        rows={4}
+                        placeholder="Write a notice for students…"
                     />
                     <button
                         onClick={handleSend}
@@ -97,14 +94,11 @@ export default function NotificationsAlerts() {
                     </button>
                 </div>
 
-                {/* Alerts feed */}
+                {/* Alerts list */}
                 <div className="card">
                     <div className="flex items-center gap-2 px-5 pt-5 pb-3 border-b border-slate-50">
                         <FiBell size={14} className="text-slate-400" />
                         <h3 className="text-sm font-semibold text-slate-700">Recent Alerts</h3>
-                        {!loading && notifications.length > 0 && (
-                            <span className="ml-auto text-[11px] text-slate-400">{notifications.length} total</span>
-                        )}
                     </div>
                     <div className="px-5 py-3 divide-y divide-slate-50 max-h-96 overflow-y-auto">
                         {loading ? (
@@ -120,12 +114,12 @@ export default function NotificationsAlerts() {
                         ) : notifications.length === 0 ? (
                             <div className="py-10 text-center">
                                 <FiBell className="mx-auto text-slate-200 mb-2" size={24} />
-                                <p className="text-sm text-slate-400">No alerts yet</p>
+                                <p className="text-sm text-slate-400">No alerts</p>
                             </div>
                         ) : (
                             notifications.map((n) => (
                                 <div key={n._id} className="py-3 flex items-start gap-3">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 shrink-0" />
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm text-slate-700 leading-snug">{n.text || n.title || n.message}</p>
                                         <p className="text-[11px] text-slate-400 mt-0.5">
@@ -138,6 +132,6 @@ export default function NotificationsAlerts() {
                     </div>
                 </div>
             </div>
-        </AdminLayout>
+        </WardenLayout>
     );
 }

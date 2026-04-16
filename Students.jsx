@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import AdminLayout from "../../layout/AdminLayout.jsx";
+import WardenLayout from "../../layout/WardenLayout.jsx";
 import { useAuthContext } from "../../context/AuthContext.jsx";
 import { FiUsers, FiSearch, FiPhone, FiMail } from "react-icons/fi";
 
 const API_BASE = import.meta.env.VITE_API_BASE;
 
-export default function Students() {
+export default function WardenStudents() {
     const { token } = useAuthContext();
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -30,7 +30,7 @@ export default function Students() {
     });
 
     return (
-        <AdminLayout active="students">
+        <WardenLayout active="students">
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Students</h1>
@@ -92,8 +92,8 @@ export default function Students() {
                                         <td className="text-slate-400 text-xs">{idx + 1}</td>
                                         <td>
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-                                                    <span className="text-indigo-600 text-xs font-bold">
+                                                <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+                                                    <span className="text-violet-600 text-xs font-bold">
                                                         {s.fullName?.[0]?.toUpperCase()}
                                                     </span>
                                                 </div>
@@ -136,6 +136,6 @@ export default function Students() {
                     )}
                 </div>
             </div>
-        </AdminLayout>
+        </WardenLayout>
     );
 }
