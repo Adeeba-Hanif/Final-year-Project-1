@@ -21,16 +21,16 @@ const BLUE = "#2563EB";
 
 export default function RoomAllocation() {
   const { token } = useAuthContext();
-  const { profile, setProfile } = useProfileStore();
+  const { profile } = useProfileStore();
 
   const [rooms, setRooms] = useState([]);
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
 
   const baseURL = process.env.EXPO_PUBLIC_SERVER_URI;
 
-  // format room name
   const roomLabel = (roomLike) => {
     if (!roomLike) return "Room";
     if (typeof roomLike === "string") return roomLike;
@@ -51,12 +51,12 @@ export default function RoomAllocation() {
     return "Wi-Fi";
   };
 
-  // fetch rooms from your existing endpoint
+  // fetch rooms from new rooms endpoint
   useEffect(() => {
     const loadRooms = async () => {
       try {
         setLoadingRooms(true);
-        const res = await axios.get(`${baseURL}/service/rooms`, {
+        const res = await axios.get(`${baseURL}/room`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -74,14 +74,13 @@ export default function RoomAllocation() {
     loadRooms();
   }, [baseURL, token]);
 
-  // preselect user room from profile
+  // preselect current room
   useEffect(() => {
     if (profile?.room?._id) {
       setSelectedRoomId(profile.room._id);
     }
   }, [profile]);
 
-  // group rooms by level
   const groupedByLevel = useMemo(() => {
     const m = {};
     rooms.forEach((r) => {
@@ -102,12 +101,14 @@ export default function RoomAllocation() {
     setSelectedRoomId(room._id);
   };
 
+  // now we send a room request instead of directly updating user.room
   const handleConfirm = async () => {
     if (!selectedRoomId) {
       Alert.alert("Select a room first");
       return;
     }
 
+    // optional: if user selects same room as current, no need to send
     if (profile?.room?._id && profile.room._id === selectedRoomId) {
       Alert.alert("No change", "You are already in this room.");
       return;
@@ -115,23 +116,26 @@ export default function RoomAllocation() {
 
     try {
       setSaving(true);
-      const res = await axios.put(
-        `${baseURL}/user/student/me`,
-        { room: selectedRoomId },
+      await axios.post(
+        `${baseURL}/room/requests`,
+        { toRoom: selectedRoomId },
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         }
       );
-      setProfile(res.data);
-      Alert.alert("Success", "Room updated successfully.");
+      setRequestSent(true);
+      Alert.alert(
+        "Request Submitted",
+        "Your room change request has been sent for warden approval.\n\nOnce approved, a Bank of Meezan booking challan will be automatically generated for you."
+      );
     } catch (err) {
-      console.log("update room err", err?.response?.data || err.message);
+      console.log("room request err", err?.response?.data || err.message);
       const msg =
         err?.response?.data?.message ||
         err?.message ||
-        "Could not update room";
+        "Could not create room request";
       Alert.alert("Error", msg);
     } finally {
       setSaving(false);
@@ -174,16 +178,27 @@ export default function RoomAllocation() {
         <Typography variant="link" style={{ fontSize: 18 }}>
           {selectedRoomId
             ? roomLabel(rooms.find((r) => r._id === selectedRoomId))
-            : "—"}
+            : ""}
         </Typography>
 
         <LongTextButton
-          text={saving ? "Saving..." : "Confirm Allocation"}
+          text={saving ? "Sending..." : "Request this room"}
           style={{ marginTop: 10 }}
           onPress={handleConfirm}
           disabled={saving}
         />
       </View>
+
+      {/* pending request banner */}
+      {requestSent && (
+        <View style={styles.pendingBanner}>
+          <Text style={styles.pendingTitle}>Request Pending Approval</Text>
+          <Text style={styles.pendingBody}>
+            Your room change request is awaiting warden approval. A booking
+            challan will be generated automatically once approved.
+          </Text>
+        </View>
+      )}
 
       {/* rooms list */}
       {loadingRooms ? (
@@ -250,9 +265,9 @@ function SeatDots({ capacity, occupied, selected }) {
 
   const dots = [];
   for (let i = 0; i < capacity; i++) {
-    let color = GREEN; // available by default
-    if (i < occupied) color = RED; // occupied slot
-    if (selected) color = BLUE; // selected overrides to blue
+    let color = GREEN;
+    if (i < occupied) color = RED;
+    if (selected) color = BLUE;
     dots.push(
       <View key={i} style={[styles.dot, { backgroundColor: color }]} />
     );
@@ -337,7 +352,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 2,
     borderColor: "#E5E7EB",
-    backgroundColor: "#F3F4F6", // same color for all
+    backgroundColor: "#F3F4F6",
     paddingHorizontal: 4,
   },
   dotsRow: {
@@ -356,5 +371,23 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginTop: 2,
   },
+  pendingBanner: {
+    marginTop: 12,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    padding: 14,
+  },
+  pendingTitle: {
+    fontWeight: "700",
+    color: "#C2410C",
+    marginBottom: 4,
+    fontSize: 13,
+  },
+  pendingBody: {
+    color: "#9A3412",
+    fontSize: 12,
+    lineHeight: 18,
+  },
 });
-

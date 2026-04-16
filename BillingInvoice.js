@@ -1,239 +1,394 @@
-// screens/BillingInvoice.js
-import React, { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import axios from "axios";
 import Layout from "../components/Layout";
-import Typography from "../components/Typography";
-import LongTextButton from "../components/LongTextButton";
-import { useAuthContext } from "../context/auth";
-import { students, rooms } from "../dummyData";
+import { useAuthContext } from "../context";
+import { useProfileStore } from "../store/profile";
+
+const BASE_URL = process.env.EXPO_PUBLIC_SERVER_URI;
 
 export default function BillingInvoice() {
-  const { token } = useAuthContext(); // token = email
-  const user = students[token];
+    const { token } = useAuthContext();
+    const profile = useProfileStore((s) => s.profile);
 
-  const student = useMemo(() => {
-    if (!user) return { name: "—", sap: "—", room: "—" };
-    const roomNum = user.currentRoomId
-      ? rooms[user.currentRoomId]?.roomNumber || "—"
-      : "—";
-    return {
-      name: user.name || "—",
-      sap: user.sapId || "—",
-      room: roomNum,
+    const [challans, setChallans] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [pdfLoading, setPdfLoading] = useState(null); // challan id being downloaded
+
+    const fetchChallans = useCallback(async () => {
+        try {
+            const res = await axios.get(`${BASE_URL}/challan/my`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setChallans(res.data.challans || []);
+        } catch (err) {
+            Alert.alert("Error", err?.response?.data?.message || "Could not load challans");
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        fetchChallans();
+    }, [fetchChallans]);
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchChallans();
     };
-  }, [user]);
 
-  // --- Demo invoice data ---
-  const invoice = useMemo(() => {
-    const paidBreakdown = {
-      roomRent: 250000,
-      mess: 7500,
-      laundryIroning: 1200,
+    const handleDownloadPdf = async (challan) => {
+        setPdfLoading(challan._id);
+        try {
+            const html = buildChallanHtml(challan, profile);
+            const { uri } = await Print.printToFileAsync({ html, base64: false });
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: "application/pdf",
+                    dialogTitle: `Challan ${challan.challanId}`,
+                });
+            } else {
+                Alert.alert("Saved", `PDF saved to: ${uri}`);
+            }
+        } catch (err) {
+            Alert.alert("Error", "Failed to generate PDF");
+        } finally {
+            setPdfLoading(null);
+        }
     };
 
-    const included = ["Wi-Fi", "Transport", "Maintenance"];
-    const total =
-      (paidBreakdown.roomRent || 0) +
-      (paidBreakdown.mess || 0) +
-      (paidBreakdown.laundryIroning || 0);
+    if (loading) {
+        return (
+            <Layout title="Billing & Invoice" showBack>
+                <View style={styles.center}>
+                    <ActivityIndicator size="large" color="#4F46E5" />
+                    <Text style={styles.loadingText}>Loading challans…</Text>
+                </View>
+            </Layout>
+        );
+    }
 
-    return {
-      month: "October 2025",
-      student,
-      included,
-      paidBreakdown,
-      total,
-      status: "Unpaid",
-    };
-  }, [student]);
+    return (
+        <Layout title="Billing & Invoice" showBack>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                contentContainerStyle={{ gap: 16, paddingBottom: 24 }}
+            >
+                <Text style={styles.subtitle}>
+                    Your Bank of Meezan payment challans
+                </Text>
 
-  const { month, included, paidBreakdown, total, status } = invoice;
-
-  return (
-    <Layout title="Billing & Invoice" showBack scroll>
-      <View style={{ gap: 14 }}>
-        {/* Header */}
-        <Typography
-          variant="sub heading"
-          style={{ textAlign: "center", color: "#6B7280" }}
-        >
-          View and download your monthly charges
-        </Typography>
-
-        {/* Invoice Card */}
-        <View style={styles.hero}>
-          <View style={styles.icon}>
-            <Text style={{ fontSize: 30 }}>💳</Text>
-          </View>
-          <Typography variant="sub heading" style={{ textAlign: "center" }}>
-            RiphahStay Invoice
-          </Typography>
-          <Text style={{ color: "#6B7280", textAlign: "center" }}>{month}</Text>
-
-          <View style={styles.info}>
-            <Row k="User Name:" v={student.name} />
-            <Row k="SAP ID:" v={student.sap} />
-            <Row k="Room No:" v={student.room} />
-          </View>
-        </View>
-
-        {/* Room Rent */}
-        <Section title="Room Charges">
-          <KeyValue
-            pill
-            k="Monthly Room Rent"
-            v={`Rs. ${(paidBreakdown.roomRent || 0).toLocaleString()}`}
-          />
-        </Section>
-
-        {/* Included Services */}
-        <Section title="Included Services (Free)">
-          {included.map((s) => (
-            <KeyValue key={s} k={s} v="Included" included />
-          ))}
-        </Section>
-
-        {/* Paid Services */}
-        <Section title="Additional Paid Services">
-          <KeyValue
-            k="Laundry / Ironing (completed)"
-            v={`Rs. ${(paidBreakdown.laundryIroning || 0).toLocaleString()}`}
-          />
-          <KeyValue
-            k="Mess (meals booked)"
-            v={`Rs. ${(paidBreakdown.mess || 0).toLocaleString()}`}
-          />
-        </Section>
-
-        {/* Total */}
-        <View style={styles.total}>
-          <Text style={{ fontWeight: "700", fontSize: 16 }}>Total Payable</Text>
-          <Text style={{ fontWeight: "800", fontSize: 18 }}>
-            Rs. {total.toLocaleString()}
-          </Text>
-        </View>
-
-        {/* Status */}
-        <View style={styles.statusRow}>
-          <Text style={{ color: "#6B7280" }}>Payment Status:</Text>
-          <Text
-            style={{
-              fontWeight: "700",
-              color: status === "Paid" ? "#16A34A" : "#DC2626",
-            }}
-          >
-            {status}
-          </Text>
-        </View>
-
-        <LongTextButton
-          text="Download PDF"
-          onPress={() => { }}
-          style={{ marginTop: 8 }}
-        />
-      </View>
-    </Layout>
-  );
+                {challans.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyIcon}>🧾</Text>
+                        <Text style={styles.emptyTitle}>No Challans Yet</Text>
+                        <Text style={styles.emptyText}>
+                            Monthly challans will appear here once generated by admin.
+                        </Text>
+                    </View>
+                ) : (
+                    challans.map((challan) => (
+                        <ChallanCard
+                            key={challan._id}
+                            challan={challan}
+                            onDownload={() => handleDownloadPdf(challan)}
+                            pdfLoading={pdfLoading === challan._id}
+                        />
+                    ))
+                )}
+            </ScrollView>
+        </Layout>
+    );
 }
 
-function Row({ k, v }) {
-  return (
-    <View style={styles.row}>
-      <Text style={{ color: "#6B7280" }}>{k}</Text>
-      <Text style={{ fontWeight: "600", color: "#111827" }}>{v}</Text>
-    </View>
-  );
+function ChallanCard({ challan, onDownload, pdfLoading }) {
+    const isPaid = challan.status === "paid";
+    const isOverdue = !isPaid && new Date(challan.dueDate) < new Date();
+
+    return (
+        <View style={styles.card}>
+            {/* Card Header */}
+            <View style={styles.cardHeader}>
+                <View>
+                    <Text style={styles.cardMonth}>{challan.month}</Text>
+                    <Text style={styles.challanId}>{challan.challanId}</Text>
+                </View>
+                <StatusBadge status={challan.status} isOverdue={isOverdue} />
+            </View>
+
+            {/* Divider */}
+            <View style={styles.divider} />
+
+            {/* Items */}
+            {challan.items.map((item, idx) => (
+                <View key={idx} style={styles.itemRow}>
+                    <Text style={styles.itemDesc}>{item.description}</Text>
+                    <Text style={[styles.itemAmt, item.amount === 0 && styles.includedText]}>
+                        {item.amount === 0 ? "Included" : `Rs. ${item.amount.toLocaleString()}`}
+                    </Text>
+                </View>
+            ))}
+
+            {/* Total */}
+            <View style={styles.divider} />
+            <View style={[styles.itemRow, styles.totalRow]}>
+                <Text style={styles.totalLabel}>Total Payable</Text>
+                <Text style={styles.totalAmt}>
+                    Rs. {challan.totalAmount.toLocaleString()}
+                </Text>
+            </View>
+
+            {/* Due date */}
+            <View style={styles.metaRow}>
+                <Text style={styles.metaLabel}>Due Date</Text>
+                <Text style={[styles.metaValue, isOverdue && !isPaid && { color: "#DC2626" }]}>
+                    {new Date(challan.dueDate).toLocaleDateString("en-PK", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                    })}
+                    {isOverdue && !isPaid ? "  Overdue" : ""}
+                </Text>
+            </View>
+
+            {isPaid && challan.paidAt && (
+                <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>Paid On</Text>
+                    <Text style={styles.metaValue}>
+                        {new Date(challan.paidAt).toLocaleDateString("en-PK", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                        })}
+                    </Text>
+                </View>
+            )}
+
+            {isPaid && challan.bankRef ? (
+                <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>Bank Ref</Text>
+                    <Text style={styles.metaValue}>{challan.bankRef}</Text>
+                </View>
+            ) : null}
+
+            {/* Download Button */}
+            <TouchableOpacity
+                style={[styles.downloadBtn, pdfLoading && { opacity: 0.6 }]}
+                onPress={onDownload}
+                disabled={pdfLoading}
+                activeOpacity={0.8}
+            >
+                {pdfLoading ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                    <Text style={styles.downloadBtnText}>↓  Download Challan PDF</Text>
+                )}
+            </TouchableOpacity>
+        </View>
+    );
 }
 
-function Section({ title, children }) {
-  return (
-    <View style={styles.section}>
-      <Text style={{ fontWeight: "600", marginBottom: 6 }}>{title}</Text>
-      {children}
-    </View>
-  );
+function StatusBadge({ status, isOverdue }) {
+    let bg, color, label;
+    if (status === "paid") {
+        bg = "#DCFCE7"; color = "#166534"; label = "Paid";
+    } else if (isOverdue) {
+        bg = "#FEE2E2"; color = "#991B1B"; label = "Overdue";
+    } else {
+        bg = "#FEF9C3"; color = "#854D0E"; label = "Unpaid";
+    }
+    return (
+        <View style={[styles.badge, { backgroundColor: bg }]}>
+            <Text style={[styles.badgeText, { color }]}>{label}</Text>
+        </View>
+    );
 }
 
-function KeyValue({ k, v, included, pill }) {
-  return (
-    <View
-      style={[
-        styles.kv,
-        pill && { backgroundColor: "#E0EAFF" },
-        included && { backgroundColor: "#ECFDF5" },
-      ]}
-    >
-      <Text style={{ color: "#111827" }}>{k}</Text>
-      <Text
-        style={{
-          color: included ? "#16A34A" : "#111827",
-          fontWeight: "600",
-        }}
-      >
-        {v}
-      </Text>
-    </View>
-  );
+// ── PDF HTML Template ─────────────────────────────────────────────────────────
+function buildChallanHtml(challan, profile) {
+    const itemRows = challan.items
+        .map(
+            (item) => `
+      <tr>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${item.description}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;color:${item.amount === 0 ? "#16A34A" : "#111827"}">
+          ${item.amount === 0 ? "Included" : `Rs. ${item.amount.toLocaleString()}`}
+        </td>
+      </tr>`
+        )
+        .join("");
+
+    const isPaid = challan.status === "paid";
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<style>
+  body{font-family:Arial,sans-serif;margin:0;padding:32px;color:#111827;background:#fff;}
+  .header{text-align:center;margin-bottom:24px;}
+  .bank-name{font-size:24px;font-weight:700;color:#1B4A8A;margin:0;}
+  .sub{font-size:14px;color:#6B7280;margin:4px 0 0;}
+  .divider{border:none;border-top:2px solid #E5E7EB;margin:20px 0;}
+  .section-title{font-size:13px;font-weight:700;color:#4B5563;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-bottom:16px;}
+  .info-item label{font-size:11px;color:#9CA3AF;display:block;margin-bottom:2px;}
+  .info-item span{font-size:13px;font-weight:600;}
+  table{width:100%;border-collapse:collapse;}
+  th{background:#F9FAFB;padding:10px 8px;text-align:left;font-size:12px;color:#6B7280;font-weight:600;}
+  th:last-child{text-align:right;}
+  td{font-size:13px;color:#111827;}
+  .total-row td{font-weight:700;font-size:15px;padding:12px 8px;border-top:2px solid #E5E7EB;}
+  .total-row td:last-child{text-align:right;color:#4F46E5;}
+  .status-badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;}
+  .paid{background:#DCFCE7;color:#166534;}
+  .unpaid{background:#FEF9C3;color:#854D0E;}
+  .footer{margin-top:32px;text-align:center;font-size:11px;color:#9CA3AF;}
+</style>
+</head>
+<body>
+  <div class="header">
+    <p class="bank-name">Bank of Meezan</p>
+    <p class="sub">Payment Challan / Fee Slip</p>
+    <p class="sub">RiphahStay Hostel Management System</p>
+  </div>
+  <hr class="divider"/>
+
+  <div class="section-title">Challan Details</div>
+  <div class="info-grid">
+    <div class="info-item"><label>Challan ID</label><span>${challan.challanId}</span></div>
+    <div class="info-item"><label>Month</label><span>${challan.month}</span></div>
+    <div class="info-item"><label>Issue Date</label><span>${new Date(challan.createdAt).toLocaleDateString("en-PK")}</span></div>
+    <div class="info-item"><label>Due Date</label><span>${new Date(challan.dueDate).toLocaleDateString("en-PK")}</span></div>
+    <div class="info-item">
+      <label>Status</label>
+      <span class="status-badge ${isPaid ? "paid" : "unpaid"}">${isPaid ? "PAID" : "UNPAID"}</span>
+    </div>
+    ${challan.bankRef ? `<div class="info-item"><label>Bank Reference</label><span>${challan.bankRef}</span></div>` : ""}
+  </div>
+  <hr class="divider"/>
+
+  <div class="section-title">Student Details</div>
+  <div class="info-grid">
+    <div class="info-item"><label>Name</label><span>${profile?.fullName || ""}</span></div>
+    <div class="info-item"><label>Email</label><span>${profile?.email || ""}</span></div>
+    ${profile?.phone ? `<div class="info-item"><label>Phone</label><span>${profile.phone}</span></div>` : ""}
+  </div>
+  <hr class="divider"/>
+
+  <div class="section-title">Fee Breakdown</div>
+  <table>
+    <thead><tr><th>Description</th><th>Amount (PKR)</th></tr></thead>
+    <tbody>
+      ${itemRows}
+      <tr class="total-row">
+        <td>Total Payable</td>
+        <td>Rs. ${challan.totalAmount.toLocaleString()}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>This is a computer-generated challan. Please keep it for your records.</p>
+    <p>Bank of Meezan · RiphahStay Hostel · Riphah International University</p>
+  </div>
+</body>
+</html>`;
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 12,
-    alignItems: "center",
-    gap: 8,
-  },
-  icon: {
-    width: 64,
-    height: 64,
-    borderRadius: 14,
-    backgroundColor: "#E0EAFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  info: {
-    width: "100%",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
-    padding: 10,
-    marginTop: 6,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-  },
-  section: {
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 12,
-    gap: 8,
-  },
-  kv: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    backgroundColor: "#F3F4F6",
-    padding: 12,
-    borderRadius: 10,
-  },
-  total: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 12,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  statusRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 6,
-    alignItems: "center",
-  },
+    center: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        paddingTop: 60,
+    },
+    loadingText: { color: "#6B7280", fontSize: 14 },
+    subtitle: {
+        fontSize: 14,
+        color: "#6B7280",
+        textAlign: "center",
+        marginTop: 4,
+    },
+    emptyState: {
+        alignItems: "center",
+        paddingVertical: 48,
+        gap: 8,
+    },
+    emptyIcon: { fontSize: 48 },
+    emptyTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
+    emptyText: {
+        fontSize: 13,
+        color: "#9CA3AF",
+        textAlign: "center",
+        maxWidth: 260,
+    },
+    card: {
+        backgroundColor: "#FFF",
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        padding: 16,
+        gap: 10,
+        shadowColor: "#000",
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
+    },
+    cardHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+    },
+    cardMonth: { fontSize: 16, fontWeight: "700", color: "#111827" },
+    challanId: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+    badge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+    },
+    badgeText: { fontSize: 12, fontWeight: "700" },
+    divider: { height: 1, backgroundColor: "#F3F4F6" },
+    itemRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+    },
+    itemDesc: { fontSize: 13, color: "#374151", flex: 1, marginRight: 8 },
+    itemAmt: { fontSize: 13, fontWeight: "600", color: "#111827" },
+    includedText: { color: "#16A34A" },
+    totalRow: { paddingTop: 4 },
+    totalLabel: { fontSize: 15, fontWeight: "700", color: "#111827" },
+    totalAmt: { fontSize: 16, fontWeight: "800", color: "#4F46E5" },
+    metaRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+    },
+    metaLabel: { fontSize: 12, color: "#9CA3AF" },
+    metaValue: { fontSize: 12, fontWeight: "600", color: "#374151" },
+    downloadBtn: {
+        backgroundColor: "#4F46E5",
+        borderRadius: 10,
+        paddingVertical: 12,
+        alignItems: "center",
+        marginTop: 4,
+    },
+    downloadBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
 });

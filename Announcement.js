@@ -1,33 +1,33 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Layout from "../components/Layout";
 import { useAuthContext } from "../context";
-import { notifications as allNotifications } from "../dummyData";
+import { useNotificationStore } from "../store/notification";
 
 export default function Notifications() {
   const { token } = useAuthContext();
-  const [notifs, setNotifs] = useState(
-    allNotifications.filter((n) => n.studentId === token)
-  );
+  const {
+    notifications,
+    loading,
+    fetchNotifications,
+  } = useNotificationStore();
+
+  useEffect(() => {
+    if (token) fetchNotifications(token);
+  }, [token]);
 
   const iconForType = (type) => {
     switch (type) {
       case "alert":
         return <Feather name="alert-triangle" size={20} color="#DC2626" />;
-      case "reminder":
-        return <Feather name="calendar" size={20} color="#F59E0B" />;
       case "system":
         return <Feather name="settings" size={20} color="#2563EB" />;
-      default:
+      case "info":
         return <Feather name="info" size={20} color="#10B981" />;
+      default:
+        return <Feather name="bell" size={20} color="#F59E0B" />;
     }
-  };
-
-  const handlePress = (id) => {
-    setNotifs((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-    );
   };
 
   const formatDate = (iso) => {
@@ -40,36 +40,47 @@ export default function Notifications() {
     });
   };
 
+  if (loading) {
+    return (
+      <Layout title="Notifications" showBack scroll>
+        <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 30 }} />
+      </Layout>
+    );
+  }
+
+  if (!notifications?.length) {
+    return (
+      <Layout title="Notifications" showBack scroll>
+        <Text style={styles.emptyText}>No notifications found.</Text>
+      </Layout>
+    );
+  }
+
   return (
     <Layout title="Notifications" showBack scroll>
-      {notifs.length === 0 ? (
-        <Text style={styles.emptyText}>No notifications found.</Text>
-      ) : (
-        notifs.map((notif) => (
-          <TouchableOpacity
-            key={notif.id}
-            style={[
-              styles.card,
-              !notif.isRead && { backgroundColor: "#EEF2FF" },
-            ]}
-            onPress={() => handlePress(notif.id)}
-          >
-            <View style={styles.iconContainer}>{iconForType(notif.type)}</View>
+      {notifications.map((notif) => (
+        <TouchableOpacity
+          key={notif._id}
+          style={[
+            styles.card,
+            !notif.isRead && { backgroundColor: "#EEF2FF" },
+          ]}
+        >
+          <View style={styles.iconContainer}>{iconForType(notif.type)}</View>
 
-            <View style={styles.textContainer}>
-              <Text style={styles.title}>{notif.title}</Text>
-              <Text style={styles.message}>{notif.message}</Text>
+          <View style={styles.textContainer}>
+            <Text style={styles.title}>{notif.title || "Notification"}</Text>
+            <Text style={styles.message}>{notif.text}</Text>
 
-              <View style={styles.row}>
-                <Text style={styles.type}>{notif.type.toUpperCase()}</Text>
-                <Text style={styles.date}>{formatDate(notif.createdAt)}</Text>
-              </View>
+            <View style={styles.row}>
+              <Text style={styles.type}>{notif.type.toUpperCase()}</Text>
+              <Text style={styles.date}>{formatDate(notif.createdAt)}</Text>
             </View>
+          </View>
 
-            {!notif.isRead && <View style={styles.dot} />}
-          </TouchableOpacity>
-        ))
-      )}
+          {!notif.isRead && <View style={styles.dot} />}
+        </TouchableOpacity>
+      ))}
     </Layout>
   );
 }
