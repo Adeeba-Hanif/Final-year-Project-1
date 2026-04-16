@@ -10,6 +10,8 @@ const leaveSchema = new Schema(
             to: { type: Date, required: true },
         },
         status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+        note: { type: String, default: "" },
+        decidedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     },
     { timestamps: true }
 );
