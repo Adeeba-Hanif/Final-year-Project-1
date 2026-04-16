@@ -1,36 +1,172 @@
-// screens/Hostels.js
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+// screens/NearbyHostels.js
+import React, { useRef, useMemo } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+  TouchableOpacity,
+} from "react-native";
+import WebView from "react-native-webview";
 import Layout from "../components/Layout";
 import Typography from "../components/Typography";
 import { nearbyHostels } from "../dummyData";
 import { Ionicons } from "@expo/vector-icons";
 
-export default function NearbyHostels() {
+const MAP_CENTER = { lat: 33.6258, lng: 72.9845 }; // Gulberg Greens, Islamabad
+const MAP_ZOOM = 14;
+
+function buildMapHtml(hostels) {
+  const markersJson = JSON.stringify(
+    hostels
+      .filter((h) => h.lat != null && h.lng != null)
+      .map((h) => ({
+        id: h.id,
+        lat: h.lat,
+        lng: h.lng,
+        name: h.name,
+        location: h.location,
+        rating: h.rating,
+        rate: h.averageRate,
+      }))
+  );
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <style>
+    * { margin: 0; padding: 0; }
+    html, body, #map { height: 100%; width: 100%; }
+    .custom-marker {
+      background: #2563EB;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const hostels = ${markersJson};
+    const center = [${MAP_CENTER.lat}, ${MAP_CENTER.lng}];
+
+    const map = L.map('map', {
+      zoomControl: false,
+      attributionControl: true
+    }).setView(center, ${MAP_ZOOM});
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    hostels.forEach(function(h) {
+      const el = document.createElement('div');
+      el.className = 'custom-marker';
+      el.textContent = h.name;
+
+      const marker = L.marker([h.lat, h.lng], {
+        icon: L.divIcon({
+          html: el.outerHTML,
+          className: '',
+          iconSize: [120, 40],
+          iconAnchor: [60, 20]
+        })
+      });
+
+      const popup = '<b>' + h.name + '</b><br/>' +
+        h.location + '<br/>' +
+        '<small>★ ' + h.rating.toFixed(1) + ' · Rs.' + h.rate.toLocaleString() + '/mo</small>';
+      marker.bindPopup(popup).addTo(map);
+    });
+
+    if (hostels.length > 1) {
+      const group = L.featureGroup(hostels.map(h => L.marker([h.lat, h.lng])));
+      map.fitBounds(group.getBounds().pad(0.15));
+    }
+  </script>
+</body>
+</html>
+  `;
+}
+
+export default function NearbyHostels({ navigation, route }) {
+  const webViewRef = useRef(null);
+  const isGuest = route?.name === "GuestNearbyHostels";
+
+  const mapHtml = useMemo(() => buildMapHtml(nearbyHostels), []);
   return (
-    <Layout title="Nearby Hostels" showBack scroll>
-      <Typography variant="heading" style={{ marginBottom: 10 }}>
+    <Layout title="Nearby Hostels" showBack scroll={false}>
+      <Typography variant="subheading" style={styles.sectionTitle}>
+        Hostels on Map
+      </Typography>
+
+      <View style={styles.mapContainer}>
+        <WebView
+          ref={webViewRef}
+          source={{ html: mapHtml }}
+          style={styles.map}
+          scrollEnabled={false}
+          nestedScrollEnabled={true}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          originWhitelist={["*"]}
+          startInLoadingState={true}
+          renderLoading={() => (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color="#2563EB" />
+              <Text style={styles.loadingText}>Loading map...</Text>
+            </View>
+          )}
+        />
+      </View>
+
+      <Typography variant="subheading" style={styles.listTitle}>
         Recommended Hostels Near Campus
       </Typography>
 
+      {isGuest && (
+        <TouchableOpacity
+          style={styles.guestBanner}
+          onPress={() => navigation.navigate("Login")}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.guestBannerText}>
+            🔐  Sign in to book a room or contact the hostel
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {nearbyHostels.map((hostel) => (
         <View key={hostel.id} style={styles.card}>
-          <Text style={styles.name}>{hostel.name}</Text>
+          <View style={styles.cardHeader}>
+            <View style={styles.locationIcon}>
+              <Ionicons name="location" size={16} color="#2563EB" />
+            </View>
+            <View style={styles.cardTitleRow}>
+              <Text style={styles.name}>{hostel.name}</Text>
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={14} color="#FACC15" />
+                <Text style={styles.ratingText}>{hostel.rating.toFixed(1)}</Text>
+              </View>
+            </View>
+          </View>
           <Text style={styles.location}>{hostel.location}</Text>
           <Text style={styles.description}>{hostel.description}</Text>
-
-          {/* Rating */}
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={14} color="#FACC15" fill="#FACC15" />
-            <Text style={styles.ratingText}>{hostel.rating.toFixed(1)}</Text>
-          </View>
-
-          {/* Rate */}
           <Text style={styles.rate}>
             Rs. {hostel.averageRate.toLocaleString()} / month
           </Text>
-
-          {/* Contact Info */}
           <View style={styles.contactContainer}>
             <Text style={styles.contactText}>📧 {hostel.email}</Text>
             <Text style={styles.contactText}>📞 {hostel.phone}</Text>
@@ -42,6 +178,43 @@ export default function NearbyHostels() {
 }
 
 const styles = StyleSheet.create({
+  sectionTitle: {
+    marginBottom: 10,
+    color: "#374151",
+  },
+  mapContainer: {
+    height: 220,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#E5E7EB",
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  map: {
+    flex: 1,
+    backgroundColor: "transparent",
+    ...(Platform.OS === "android" && { opacity: 0.99 }),
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  listTitle: {
+    marginBottom: 10,
+    color: "#374151",
+  },
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -49,6 +222,19 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
     padding: 14,
     marginBottom: 14,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  locationIcon: {
+    marginRight: 8,
+  },
+  cardTitleRow: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   name: {
     fontSize: 16,
@@ -59,6 +245,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#4B5563",
     marginBottom: 4,
+    marginLeft: 24,
   },
   description: {
     fontSize: 13,
@@ -68,11 +255,10 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
   },
   ratingText: {
     marginLeft: 4,
-    color: "#FACC15",
+    color: "#92400E",
     fontWeight: "600",
   },
   rate: {
@@ -89,5 +275,20 @@ const styles = StyleSheet.create({
   contactText: {
     fontSize: 13,
     color: "#374151",
+  },
+  guestBanner: {
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    alignItems: "center",
+  },
+  guestBannerText: {
+    color: "#4338CA",
+    fontWeight: "600",
+    fontSize: 13,
+    textAlign: "center",
   },
 });
